@@ -1,0 +1,144 @@
+/**
+ * File: /src/components/Footer/Footer.css
+ * VirtualVR - Footer styles
+ */
+
+.footer {
+    background-color: rgb(45, 47, 48);
+    color: #ffffff;
+    padding: 40px 24px;
+    margin-top: auto;
+}
+
+.footer-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 24px;
+}
+
+/* Brand Section */
+.footer-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+}
+
+.footer-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.footer-logo-svg {
+    width: 32px;
+    height: 32px;
+}
+
+.footer-logo-text {
+    font-family: 'Lato', sans-serif;
+    font-size: 24px;
+    font-weight: 900;
+    color: #ffffff;
+    letter-spacing: -0.5px;
+    -webkit-font-smoothing: antialiased;
+}
+
+.footer-tagline {
+    font-family: 'Lato', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    color: #4CAF50;
+    letter-spacing: 1px;
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Divider */
+.footer-divider {
+    width: 100%;
+    max-width: 200px;
+    height: 1px;
+    background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Bottom Section */
+.footer-bottom {
+    text-align: center;
+}
+
+.footer-copyright {
+    font-family: 'Lato', sans-serif;
+    font-size: 13px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+.footer-company {
+    font-weight: 700;
+    color: #ffffff;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+/* Tablet */
+@media (max-width: 768px) {
+    .footer {
+        padding: 32px 20px;
+    }
+
+    .footer-container {
+        gap: 20px;
+    }
+
+    .footer-logo-svg {
+        width: 28px;
+        height: 28px;
+    }
+
+    .footer-logo-text {
+        font-size: 22px;
+    }
+
+    .footer-copyright {
+        font-size: 12px;
+    }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+    .footer {
+        padding: 28px 16px;
+    }
+
+    .footer-container {
+        gap: 16px;
+    }
+
+    .footer-logo-svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .footer-logo-text {
+        font-size: 20px;
+    }
+
+    .footer-tagline {
+        font-size: 11px;
+    }
+
+    .footer-divider {
+        max-width: 150px;
+    }
+
+    .footer-copyright {
+        font-size: 11px;
+        line-height: 1.5;
+    }
+}

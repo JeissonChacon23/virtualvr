@@ -1,0 +1,157 @@
+/**
+ * File: /src/index.css
+ * VirtualVR - Global styles and CSS variables
+ */
+
+/* CSS Reset & Global Styles */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    /* Colors */
+    --color-primary: #4CAF50;
+    --color-primary-dark: #388E3C;
+    --color-dark: #1a1a1a;
+    --color-gray-900: #333333;
+    --color-gray-600: #666666;
+    --color-gray-400: #999999;
+    --color-gray-200: #e0e0e0;
+    --color-gray-100: #f5f5f5;
+    --color-gray-50: #fafafa;
+    --color-white: #ffffff;
+
+    /* Typography - Lato (primary) & PT Serif (secondary) */
+    --font-primary: 'Lato', sans-serif;
+    --font-secondary: 'PT Serif', serif;
+
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+    --spacing-2xl: 48px;
+
+    /* Border Radius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-full: 9999px;
+
+    /* Shadows */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+    /* Transitions */
+    --transition-fast: 0.15s ease;
+    --transition-normal: 0.2s ease;
+    --transition-slow: 0.3s ease;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: var(--font-primary);
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--color-gray-900);
+    background-color: var(--color-white);
+    min-height: 100vh;
+}
+
+/* App Layout - Footer siempre abajo */
+.app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+.app > main,
+.app > .home {
+    flex: 1;
+}
+
+/* Links */
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+/* Buttons */
+button {
+    font-family: inherit;
+    cursor: pointer;
+}
+
+/* Images */
+img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Focus styles */
+:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+
+/* Search Highlight Animation */
+.search-highlight {
+    animation: highlightPulse 3s ease-out forwards;
+}
+
+@keyframes highlightPulse {
+    0% {
+        box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.4);
+    }
+    50% {
+        box-shadow: 0 0 0 8px rgba(76, 175, 80, 0.2);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+    }
+}
+
+/* Demo Map Button - Temporal */
+.demo-map-btn {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    padding: 14px 24px;
+    font-family: 'Lato', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    color: #ffffff;
+    background-color: #4CAF50;
+    border: none;
+    border-radius: 9999px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(76, 175, 80, 0.4);
+    transition: all 0.2s ease;
+    z-index: 9999;
+    -webkit-font-smoothing: antialiased;
+}
+
+.demo-map-btn:hover {
+    background-color: rgb(45, 47, 48);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    transform: translateY(-2px);
+}
+
+/* Selection */
+::selection {
+    background-color: var(--color-primary);
+    color: var(--color-white);
+}
