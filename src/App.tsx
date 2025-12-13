@@ -3,36 +3,74 @@
  * VirtualVR - Main App component
  */
 
-import { useState } from 'react';
 import Navbar from './components/Navbar';
 import HomePage from './components/HomePage';
 import Footer from './components/Footer';
-import DeliveryMap from './components/DeliveryMap';
+import UserDashboard from './components/Dashboard/UserDashboard';
+import DeliveryDashboard from './components/Dashboard/DeliveryDashboard';
+import AdminDashboard from './components/Dashboard/AdminDashboard';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { Loader2 } from 'lucide-react';
 
-function App() {
-    const [showMap, setShowMap] = useState(false);
+// Main content component that uses auth context
+const AppContent = () => {
+    const { user, isAuthenticated, isLoading } = useAuth();
 
-    return (
-        <div className="app">
-            <Navbar />
+    // Loading state
+    if (isLoading) {
+        return (
+            <div className="app">
+                <Navbar />
+                <div className="loading-screen">
+                    <Loader2 size={48} className="loading-spinner" />
+                    <span>Cargando...</span>
+                </div>
+            </div>
+        );
+    }
 
-            {showMap ? (
-                <DeliveryMap />
-            ) : (
+    // Render based on authentication state
+    const renderContent = () => {
+        if (!isAuthenticated || !user) {
+            return (
                 <>
                     <HomePage />
                     <Footer />
                 </>
-            )}
+            );
+        }
 
-            {/* Botón flotante para demo del mapa - temporal */}
-            <button
-                className="demo-map-btn"
-                onClick={() => setShowMap(!showMap)}
-            >
-                {showMap ? '← Volver' : '🗺️ Ver Mapa'}
-            </button>
+        switch (user.role) {
+            case 'user':
+                return <UserDashboard />;
+            case 'delivery':
+                return <DeliveryDashboard />;
+            case 'admin':
+                return <AdminDashboard />;
+            default:
+                return (
+                    <>
+                        <HomePage />
+                        <Footer />
+                    </>
+                );
+        }
+    };
+
+    return (
+        <div className="app">
+            <Navbar />
+            {renderContent()}
         </div>
+    );
+};
+
+// Main App wrapper with AuthProvider
+function App() {
+    return (
+        <AuthProvider>
+            <AppContent />
+        </AuthProvider>
     );
 }
 
