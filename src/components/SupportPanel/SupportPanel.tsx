@@ -19,6 +19,7 @@ import './SupportPanel.css';
 interface SupportPanelProps {
     isOpen: boolean;
     onClose: () => void;
+    userRole?: 'user' | 'delivery' | 'admin' | null;
 }
 
 interface FAQItem {
@@ -26,7 +27,8 @@ interface FAQItem {
     answer: string;
 }
 
-const faqs: FAQItem[] = [
+// FAQs para usuarios/clientes
+const userFaqs: FAQItem[] = [
     {
         question: '¿Cómo solicito una entrega?',
         answer: 'Inicia sesión con tu cuenta de usuario, ve a "Nueva solicitud" e ingresa las direcciones de recogida y destino. Un domiciliario será asignado automáticamente.'
@@ -45,9 +47,71 @@ const faqs: FAQItem[] = [
     }
 ];
 
-const SupportPanel = ({ isOpen, onClose }: SupportPanelProps) => {
+// FAQs para domiciliarios
+const deliveryFaqs: FAQItem[] = [
+    {
+        question: '¿Cómo recibo pedidos?',
+        answer: 'Debes estar en la cola de espera. Cuando un administrador asigne un servicio, te aparecerá automáticamente en tu panel de "Servicios Activos". Asegúrate de tener la app abierta.'
+    },
+    {
+        question: '¿Cómo me uno a la cola de espera?',
+        answer: 'En tu panel principal, presiona el botón "Unirse a la cola". Serás agregado al final de la cola y recibirás servicios cuando llegue tu turno.'
+    },
+    {
+        question: '¿Cómo se calculan mis ganancias?',
+        answer: 'Recibes un porcentaje del costo total del servicio. Puedes ver el detalle de tus ganancias en la sección "Ganancias" de tu panel.'
+    },
+    {
+        question: '¿Qué hago si el cliente no está disponible?',
+        answer: 'Intenta contactar al cliente por teléfono. Si no responde después de 10 minutos, puedes marcar el servicio como "Cliente no disponible" y contactar a soporte.'
+    },
+    {
+        question: '¿Cómo actualizo mi información de vehículo?',
+        answer: 'Ve a tu perfil haciendo clic en el icono de persona. Allí podrás ver tu información de vehículo. Para cambios importantes como placa o tipo de vehículo, contacta a soporte.'
+    },
+    {
+        question: '¿Cuándo recibo mis pagos?',
+        answer: 'Los pagos se procesan semanalmente los días lunes. El monto se transfiere a la cuenta bancaria que registraste durante tu inscripción.'
+    }
+];
+
+// FAQs para administradores
+const adminFaqs: FAQItem[] = [
+    {
+        question: '¿Cómo apruebo un domiciliario?',
+        answer: 'Ve a la sección "Domiciliarios", filtra por "Pendientes de aprobación" y revisa la información del solicitante. Puedes aprobar o rechazar desde ahí.'
+    },
+    {
+        question: '¿Cómo asigno un servicio?',
+        answer: 'En la sección "Servicios", los pedidos pendientes se asignan automáticamente al primer domiciliario en la cola cuando presionas "Asignar al primero en cola".'
+    },
+    {
+        question: '¿Cómo gestiono las tarifas?',
+        answer: 'Las tarifas se configuran en la sección de Configuración. Puedes establecer tarifas base, por distancia y descuentos para clientes preferenciales.'
+    },
+    {
+        question: '¿Cómo veo los reportes?',
+        answer: 'En el Resumen puedes ver estadísticas generales. Para reportes detallados, ve a la sección de Reportes (próximamente).'
+    }
+];
+
+const SupportPanel = ({ isOpen, onClose, userRole }: SupportPanelProps) => {
     const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
     const [message, setMessage] = useState('');
+
+    // Seleccionar FAQs según el rol
+    const getFaqs = (): FAQItem[] => {
+        switch (userRole) {
+            case 'delivery':
+                return deliveryFaqs;
+            case 'admin':
+                return adminFaqs;
+            default:
+                return userFaqs;
+        }
+    };
+
+    const faqs = getFaqs();
 
     const toggleFAQ = (index: number) => {
         setExpandedFAQ(expandedFAQ === index ? null : index);

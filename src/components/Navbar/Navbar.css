@@ -219,6 +219,16 @@
     transform: translateY(0);
 }
 
+/* Logout Button - Red */
+.action-btn-logout {
+    color: #EF5350;
+}
+
+.action-btn-logout:hover {
+    background-color: rgba(239, 83, 80, 0.1);
+    color: #E53935;
+}
+
 /* Mobile Menu Button - Hidden by default on desktop */
 .action-btn.mobile-menu-btn {
     display: none;

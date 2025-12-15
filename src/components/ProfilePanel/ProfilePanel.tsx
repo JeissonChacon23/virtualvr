@@ -1,6 +1,6 @@
 /**
  * File: /src/components/ProfilePanel/ProfilePanel.tsx
- * VirtualVR - User profile panel component
+ * VirtualVR - User/Delivery profile panel component
  */
 
 import { useState, useEffect } from 'react';
@@ -15,7 +15,10 @@ import {
     Check,
     Camera,
     Shield,
-    Save
+    Save,
+    Truck,
+    Car,
+    Bike
 } from 'lucide-react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase.config';
@@ -27,7 +30,7 @@ interface ProfilePanelProps {
     onClose: () => void;
 }
 
-interface UserProfile {
+interface BaseProfile {
     firstName: string;
     lastName: string;
     email: string;
@@ -37,13 +40,30 @@ interface UserProfile {
     idCard: string;
     registerDate: Date | null;
     isActive: boolean;
-    isPreferential: boolean;
     profileImageURL?: string;
 }
 
+interface UserProfile extends BaseProfile {
+    type: 'user';
+    isPreferential: boolean;
+}
+
+interface DeliveryProfile extends BaseProfile {
+    type: 'delivery';
+    vehicleType: string;
+    vehiclePlate: string;
+    isApproved: boolean;
+}
+
+interface AdminProfile extends BaseProfile {
+    type: 'admin';
+}
+
+type Profile = UserProfile | DeliveryProfile | AdminProfile;
+
 const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
     const { user } = useAuth();
-    const [profile, setProfile] = useState<UserProfile | null>(null);
+    const [profile, setProfile] = useState<Profile | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
@@ -53,19 +73,47 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
         neighborhood: ''
     });
 
+    // Determinar la colección según el rol
+    const getCollectionName = (): string => {
+        if (!user?.role) return 'users';
+        switch (user.role) {
+            case 'delivery': return 'deliveries';
+            case 'admin': return 'admins';
+            default: return 'users';
+        }
+    };
+
     // Cargar datos completos del usuario desde Firestore
     useEffect(() => {
         const fetchProfile = async () => {
-            if (!user?.uid) return;
+            if (!user?.uid || !user?.role) {
+                console.log('ProfilePanel: No user uid or role', { uid: user?.uid, role: user?.role });
+                setIsLoading(false);
+                return;
+            }
+
+            // Determinar la colección según el rol
+            let collectionName = 'users';
+            if (user.role === 'delivery') {
+                collectionName = 'deliveries';
+            } else if (user.role === 'admin') {
+                collectionName = 'admins';
+            }
+
+            console.log('ProfilePanel: Fetching from', collectionName, 'for uid:', user.uid);
 
             setIsLoading(true);
             try {
-                const docRef = doc(db, 'users', user.uid);
+                const docRef = doc(db, collectionName, user.uid);
                 const docSnap = await getDoc(docRef);
+
+                console.log('ProfilePanel: Doc exists?', docSnap.exists());
 
                 if (docSnap.exists()) {
                     const data = docSnap.data();
-                    const profileData = {
+                    console.log('ProfilePanel: Data retrieved', data);
+
+                    const baseProfile = {
                         firstName: data.firstName || '',
                         lastName: data.lastName || '',
                         email: data.email || '',
@@ -75,15 +123,40 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
                         idCard: data.idCard || '',
                         registerDate: data.registerDate?.toDate() || null,
                         isActive: data.isActive ?? true,
-                        isPreferential: data.isPreferential ?? false,
                         profileImageURL: data.profileImageURL
                     };
+
+                    let profileData: Profile;
+
+                    if (user.role === 'delivery') {
+                        profileData = {
+                            ...baseProfile,
+                            type: 'delivery',
+                            vehicleType: data.vehicleType || '',
+                            vehiclePlate: data.vehiclePlate || '',
+                            isApproved: data.isApproved ?? false
+                        };
+                    } else if (user.role === 'admin') {
+                        profileData = {
+                            ...baseProfile,
+                            type: 'admin'
+                        };
+                    } else {
+                        profileData = {
+                            ...baseProfile,
+                            type: 'user',
+                            isPreferential: data.isPreferential ?? false
+                        };
+                    }
+
                     setProfile(profileData);
                     setEditData({
-                        phone: profileData.phone,
-                        address: profileData.address,
-                        neighborhood: profileData.neighborhood
+                        phone: baseProfile.phone,
+                        address: baseProfile.address,
+                        neighborhood: baseProfile.neighborhood
                     });
+                } else {
+                    console.log('ProfilePanel: Document not found');
                 }
             } catch (error) {
                 console.error('Error fetching profile:', error);
@@ -96,7 +169,7 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
             fetchProfile();
             setIsEditing(false);
         }
-    }, [isOpen, user?.uid]);
+    }, [isOpen, user?.uid, user?.role]);
 
     const formatDate = (date: Date | null): string => {
         if (!date) return 'No disponible';
@@ -112,12 +185,39 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
         return `${profile.firstName?.charAt(0) || ''}${profile.lastName?.charAt(0) || ''}`.toUpperCase();
     };
 
+    const getVehicleIcon = (vehicleType: string) => {
+        switch (vehicleType) {
+            case 'motorcycle': return <Bike size={18} />;
+            case 'car': return <Car size={18} />;
+            default: return <Truck size={18} />;
+        }
+    };
+
+    const getVehicleLabel = (vehicleType: string): string => {
+        switch (vehicleType) {
+            case 'motorcycle': return 'Motocicleta';
+            case 'car': return 'Automóvil';
+            case 'bicycle': return 'Bicicleta';
+            default: return vehicleType;
+        }
+    };
+
+    const getRoleLabel = (): string => {
+        if (!profile) return '';
+        switch (profile.type) {
+            case 'delivery': return 'Domiciliario';
+            case 'admin': return 'Administrador';
+            default: return 'Usuario';
+        }
+    };
+
     const handleSave = async () => {
         if (!user?.uid) return;
 
         setIsSaving(true);
         try {
-            const docRef = doc(db, 'users', user.uid);
+            const collectionName = getCollectionName();
+            const docRef = doc(db, collectionName, user.uid);
             await updateDoc(docRef, {
                 phone: editData.phone,
                 address: editData.address,
@@ -176,7 +276,7 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
                         {/* Header with Avatar */}
                         <div className="profile-header">
                             <div className="profile-avatar-container">
-                                <div className="profile-avatar">
+                                <div className={`profile-avatar ${profile.type}`}>
                                     {profile.profileImageURL ? (
                                         <img src={profile.profileImageURL} alt="Avatar" />
                                     ) : (
@@ -190,20 +290,64 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
                             <h2 className="profile-name">{profile.firstName} {profile.lastName}</h2>
                             <p className="profile-email">{profile.email}</p>
                             <div className="profile-badges">
+                <span className={`profile-badge role ${profile.type}`}>
+                  {profile.type === 'delivery' ? <Truck size={12} /> : <User size={12} />}
+                    {getRoleLabel()}
+                </span>
                                 {profile.isActive && (
                                     <span className="profile-badge active">
                     <Check size={12} />
-                    Cuenta activa
+                    Activo
                   </span>
                                 )}
-                                {profile.isPreferential && (
+                                {profile.type === 'user' && profile.isPreferential && (
                                     <span className="profile-badge preferential">
                     <Shield size={12} />
-                    Cliente preferencial
+                    Preferencial
+                  </span>
+                                )}
+                                {profile.type === 'delivery' && profile.isApproved && (
+                                    <span className="profile-badge approved">
+                    <Shield size={12} />
+                    Aprobado
+                  </span>
+                                )}
+                                {profile.type === 'delivery' && !profile.isApproved && (
+                                    <span className="profile-badge pending">
+                    <Shield size={12} />
+                    Pendiente
                   </span>
                                 )}
                             </div>
                         </div>
+
+                        {/* Vehicle Info for Delivery */}
+                        {profile.type === 'delivery' && (
+                            <div className="profile-section">
+                                <h3 className="profile-section-title">Información del vehículo</h3>
+                                <div className="profile-info-list">
+                                    <div className="profile-info-item">
+                                        <div className="profile-info-icon vehicle">
+                                            {getVehicleIcon(profile.vehicleType)}
+                                        </div>
+                                        <div className="profile-info-content">
+                                            <span className="profile-info-label">Tipo de vehículo</span>
+                                            <span className="profile-info-value">{getVehicleLabel(profile.vehicleType)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="profile-info-item">
+                                        <div className="profile-info-icon vehicle">
+                                            <CreditCard size={18} />
+                                        </div>
+                                        <div className="profile-info-content">
+                                            <span className="profile-info-label">Placa</span>
+                                            <span className="profile-info-value plate">{profile.vehiclePlate}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Personal Info Section */}
                         <div className="profile-section">

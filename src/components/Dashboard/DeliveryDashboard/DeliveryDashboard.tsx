@@ -20,21 +20,31 @@ import {
     XCircle,
     ChevronRight,
     Loader2,
-    RefreshCw
+    RefreshCw,
+    Calendar,
+    DollarSign,
+    Filter,
+    Route
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../config/firebase.config';
 import queueService from '../../../services/queue.service';
 import serviceAssignmentService from '../../../services/serviceAssignment.service';
 import type { DeliveryQueue, VehicleType } from '../../../models/DeliveryQueue.model';
 import type { DeliveryRequest, RequestStatus } from '../../../models/DeliveryRequest.model';
 import { formatTimeInQueue } from '../../../models/DeliveryQueue.model';
-import { formatCostCOP, RequestStatusInfo } from '../../../models/DeliveryRequest.model';
+import { formatCostCOP, RequestStatusInfo, formatDistance } from '../../../models/DeliveryRequest.model';
 import './DeliveryDashboard.css';
+
+type ViewType = 'inicio' | 'entregas' | 'ganancias';
+type DeliveryFilterType = 'all' | 'completed' | 'cancelled';
 
 const DeliveryDashboard = () => {
     const { user } = useAuth();
+
+    // Vista actual
+    const [currentView, setCurrentView] = useState<ViewType>('inicio');
 
     // Estados de cola
     const [currentQueue, setCurrentQueue] = useState<DeliveryQueue | null>(null);
@@ -43,6 +53,11 @@ const DeliveryDashboard = () => {
 
     // Estados de servicios asignados
     const [assignedServices, setAssignedServices] = useState<DeliveryRequest[]>([]);
+
+    // Historial de entregas
+    const [deliveryHistory, setDeliveryHistory] = useState<DeliveryRequest[]>([]);
+    const [historyFilter, setHistoryFilter] = useState<DeliveryFilterType>('all');
+    const [isLoadingHistory, setIsLoadingHistory] = useState(true);
 
     // Estados de UI
     const [isLoading, setIsLoading] = useState(true);
@@ -59,12 +74,27 @@ const DeliveryDashboard = () => {
         phone: string;
     } | null>(null);
 
+    // Escuchar eventos de navegación desde Navbar
+    useEffect(() => {
+        const handleNavigation = (e: CustomEvent) => {
+            const view = e.detail.view;
+            if (view === 'Inicio') setCurrentView('inicio');
+            else if (view === 'Mis Entregas') setCurrentView('entregas');
+            else if (view === 'Ganancias') setCurrentView('ganancias');
+            // Mi Perfil se maneja desde la Navbar directamente
+        };
+
+        window.addEventListener('user-navigate', handleNavigation as EventListener);
+        return () => {
+            window.removeEventListener('user-navigate', handleNavigation as EventListener);
+        };
+    }, []);
+
     // Cargar datos iniciales
     useEffect(() => {
         if (!user?.uid) return;
 
         const loadData = async () => {
-            setIsLoading(true);
             console.log('📦 Cargando datos para usuario:', user.uid);
 
             try {
@@ -140,6 +170,57 @@ const DeliveryDashboard = () => {
                 }));
             }
         );
+
+        return () => unsubscribe();
+    }, [user?.uid]);
+
+    // Listener del historial de entregas (completadas, entregadas, canceladas y rechazadas)
+    useEffect(() => {
+        if (!user?.uid) {
+            return;
+        }
+
+        console.log('📜 Cargando historial para domiciliario:', user.uid);
+
+        // Query simplificada - solo filtramos por deliveryPersonId
+        // y luego filtramos los estados en el cliente
+        const q = query(
+            collection(db, 'deliveryRequests'),
+            where('deliveryPersonId', '==', user.uid)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            console.log('📦 Documentos encontrados:', snapshot.docs.length);
+
+            const allRequests = snapshot.docs.map(doc => {
+                const data = doc.data();
+                console.log('📄 Doc:', doc.id, 'Status:', data.status);
+                return {
+                    id: doc.id,
+                    ...data,
+                    createdAt: data.createdAt?.toDate() || new Date(),
+                    assignedAt: data.assignedAt?.toDate(),
+                    acceptedAt: data.acceptedAt?.toDate(),
+                    deliveredAt: data.deliveredAt?.toDate(),
+                    completedAt: data.completedAt?.toDate(),
+                    cancelledAt: data.cancelledAt?.toDate(),
+                } as DeliveryRequest;
+            });
+
+            // Filtrar solo los estados que son "historial" (no activos)
+            const historyStatuses = ['completed', 'delivered', 'cancelled', 'rejected'];
+            const history = allRequests
+                .filter(r => historyStatuses.includes(r.status))
+                .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+
+            console.log('📜 Historial filtrado:', history.length, 'entregas');
+
+            setDeliveryHistory(history);
+            setIsLoadingHistory(false);
+        }, (error) => {
+            console.error('❌ Error loading delivery history:', error);
+            setIsLoadingHistory(false);
+        });
 
         return () => unsubscribe();
     }, [user?.uid]);
@@ -344,26 +425,485 @@ const DeliveryDashboard = () => {
         ['accepted', 'picked_up', 'in_transit'].includes(s.status)
     );
 
+    // Filtrar historial
+    const filteredHistory = deliveryHistory.filter(d => {
+        if (historyFilter === 'all') return true;
+        if (historyFilter === 'completed') return d.status === 'completed' || d.status === 'delivered';
+        if (historyFilter === 'cancelled') return d.status === 'cancelled' || d.status === 'rejected';
+        return true;
+    });
+
+    // Calcular estadísticas del historial
+    const historyStats = {
+        total: deliveryHistory.length,
+        completed: deliveryHistory.filter(d => d.status === 'completed' || d.status === 'delivered').length,
+        cancelled: deliveryHistory.filter(d => d.status === 'cancelled' || d.status === 'rejected').length,
+        totalEarnings: deliveryHistory
+            .filter(d => d.status === 'completed' || d.status === 'delivered')
+            .reduce((sum, d) => sum + (d.estimatedCost || 0), 0)
+    };
+
+    // Formatear fecha
+    const formatDate = (date: Date | undefined): string => {
+        if (!date) return 'Sin fecha';
+        return date.toLocaleDateString('es-CO', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    // Vista de Mis Entregas
+    const renderDeliveriesView = () => (
+        <>
+            {/* Header de entregas */}
+            <section className="delivery-header">
+                <div className="delivery-welcome">
+                    <h1 className="welcome-title">Mis Entregas 📦</h1>
+                    <p className="welcome-subtitle">Historial de todas tus entregas</p>
+                </div>
+            </section>
+
+            {/* Estadísticas */}
+            <section className="history-stats">
+                <div className="stat-card">
+                    <Package size={24} />
+                    <div className="stat-info">
+                        <span className="stat-value">{historyStats.total}</span>
+                        <span className="stat-label">Total</span>
+                    </div>
+                </div>
+                <div className="stat-card completed">
+                    <CheckCircle size={24} />
+                    <div className="stat-info">
+                        <span className="stat-value">{historyStats.completed}</span>
+                        <span className="stat-label">Completadas</span>
+                    </div>
+                </div>
+                <div className="stat-card cancelled">
+                    <XCircle size={24} />
+                    <div className="stat-info">
+                        <span className="stat-value">{historyStats.cancelled}</span>
+                        <span className="stat-label">Canceladas</span>
+                    </div>
+                </div>
+                <div className="stat-card earnings">
+                    <DollarSign size={24} />
+                    <div className="stat-info">
+                        <span className="stat-value">{formatCostCOP(historyStats.totalEarnings)}</span>
+                        <span className="stat-label">Ganancias</span>
+                    </div>
+                </div>
+            </section>
+
+            {/* Filtros */}
+            <section className="history-filters">
+                <button
+                    className={`filter-btn ${historyFilter === 'all' ? 'active' : ''}`}
+                    onClick={() => setHistoryFilter('all')}
+                >
+                    <Filter size={16} />
+                    Todas ({historyStats.total})
+                </button>
+                <button
+                    className={`filter-btn ${historyFilter === 'completed' ? 'active' : ''}`}
+                    onClick={() => setHistoryFilter('completed')}
+                >
+                    <CheckCircle size={16} />
+                    Completadas ({historyStats.completed})
+                </button>
+                <button
+                    className={`filter-btn ${historyFilter === 'cancelled' ? 'active' : ''}`}
+                    onClick={() => setHistoryFilter('cancelled')}
+                >
+                    <XCircle size={16} />
+                    Canceladas ({historyStats.cancelled})
+                </button>
+            </section>
+
+            {/* Lista de entregas */}
+            <section className="history-list">
+                {isLoadingHistory ? (
+                    <div className="history-loading">
+                        <Loader2 size={32} className="spinning" />
+                        <span>Cargando historial...</span>
+                    </div>
+                ) : filteredHistory.length === 0 ? (
+                    <div className="history-empty">
+                        <Package size={48} />
+                        <h3>Sin entregas</h3>
+                        <p>
+                            {historyFilter === 'all'
+                                ? 'Aún no has realizado ninguna entrega'
+                                : historyFilter === 'completed'
+                                    ? 'No tienes entregas completadas'
+                                    : 'No tienes entregas canceladas'}
+                        </p>
+                    </div>
+                ) : (
+                    filteredHistory.map(delivery => (
+                        <div key={delivery.id} className={`history-card ${delivery.status === 'rejected' ? 'cancelled' : delivery.status}`}>
+                            <div className="history-card-header">
+                <span className={`history-badge ${delivery.status === 'rejected' ? 'cancelled' : delivery.status}`}>
+                  {delivery.status === 'completed' || delivery.status === 'delivered' ? (
+                      <><CheckCircle size={14} /> Completada</>
+                  ) : delivery.status === 'rejected' ? (
+                      <><XCircle size={14} /> Rechazada</>
+                  ) : (
+                      <><XCircle size={14} /> Cancelada</>
+                  )}
+                </span>
+                                <span className="history-cost">{formatCostCOP(delivery.estimatedCost)}</span>
+                            </div>
+
+                            <div className="history-route">
+                                <div className="history-point">
+                                    <MapPin size={14} />
+                                    <span>{delivery.pickupNeighborhood}</span>
+                                </div>
+                                <ChevronRight size={14} className="history-arrow" />
+                                <div className="history-point">
+                                    <Navigation size={14} />
+                                    <span>{delivery.deliveryNeighborhood}</span>
+                                </div>
+                            </div>
+
+                            <div className="history-meta">
+                                <div className="history-date">
+                                    <Calendar size={14} />
+                                    <span>{formatDate(delivery.deliveredAt || delivery.completedAt || delivery.cancelledAt || delivery.createdAt)}</span>
+                                </div>
+                                <div className="history-package">
+                                    <Package size={14} />
+                                    <span>{delivery.itemDescription}</span>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </section>
+        </>
+    );
+
+    // Vista de Ganancias (placeholder)
+    const renderEarningsView = () => (
+        <>
+            <section className="delivery-header">
+                <div className="delivery-welcome">
+                    <h1 className="welcome-title">Mis Ganancias 💰</h1>
+                    <p className="welcome-subtitle">Resumen de tus ingresos</p>
+                </div>
+            </section>
+
+            <div className="coming-soon">
+                <DollarSign size={48} />
+                <h3>Próximamente</h3>
+                <p>El módulo de ganancias estará disponible pronto</p>
+            </div>
+        </>
+    );
+
+    // Vista de Inicio (contenido existente)
+    const renderHomeView = () => (
+        <>
+            {/* Header */}
+            <section className="delivery-header">
+                <div className="delivery-welcome">
+                    <h1 className="welcome-title">
+                        ¡Hola, {user?.firstName || 'Domiciliario'}! 🏍️
+                    </h1>
+                    <p className="welcome-subtitle">
+                        {isInQueue
+                            ? `Estás en la posición #${currentQueue?.position || '-'} de la cola`
+                            : 'Toma tu turno para recibir pedidos'}
+                    </p>
+                </div>
+                <button className="refresh-btn" onClick={handleRefresh} disabled={isLoading}>
+                    <RefreshCw size={20} className={isLoading ? 'spinning' : ''} />
+                </button>
+            </section>
+
+            {/* Servicios pendientes de aceptar */}
+            {pendingServices.length > 0 && (
+                <section className="pending-services-section">
+                    <h2 className="section-title-delivery">
+                        <Package size={20} />
+                        Nuevo Servicio Asignado
+                    </h2>
+                    {pendingServices.map(service => (
+                        <div key={service.id} className="service-card pending">
+                            <div className="service-header">
+                                <span className="service-badge assigned">Nuevo Servicio</span>
+                                <span className="service-cost">{formatCostCOP(service.estimatedCost)}</span>
+                            </div>
+
+                            <div className="service-route">
+                                <div className="route-point pickup">
+                                    <MapPin size={16} />
+                                    <div className="route-info">
+                                        <span className="route-label">Recoger en</span>
+                                        <span className="route-address">{service.pickupAddress}</span>
+                                        <span className="route-neighborhood">{service.pickupNeighborhood}</span>
+                                    </div>
+                                </div>
+                                <div className="route-line"></div>
+                                <div className="route-point delivery">
+                                    <Navigation size={16} />
+                                    <div className="route-info">
+                                        <span className="route-label">Entregar en</span>
+                                        <span className="route-address">{service.deliveryAddress}</span>
+                                        <span className="route-neighborhood">{service.deliveryNeighborhood}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="service-details">
+                                <div className="detail-item distance">
+                                    <Route size={14} />
+                                    <span>Distancia: <strong>{formatDistance(service.distance)}</strong></span>
+                                </div>
+                                <div className="detail-item">
+                                    <Package size={14} />
+                                    <span>{service.itemDescription}</span>
+                                </div>
+                                <div className="detail-item">
+                                    <Phone size={14} />
+                                    <span>{service.deliveryContactName} - {service.deliveryPhone}</span>
+                                </div>
+                            </div>
+
+                            <div className="service-actions">
+                                <button
+                                    className="action-btn accept"
+                                    onClick={() => handleAcceptService(service)}
+                                    disabled={isProcessingService}
+                                >
+                                    {isProcessingService ? <Loader2 size={18} className="spinning" /> : <Check size={18} />}
+                                    <span>Aceptar</span>
+                                </button>
+                                <button
+                                    className="action-btn reject"
+                                    onClick={() => handleRejectService(service)}
+                                    disabled={isProcessingService}
+                                >
+                                    <XCircle size={18} />
+                                    <span>Rechazar</span>
+                                </button>
+                            </div>
+                        </div>
+                    ))}
+                </section>
+            )}
+
+            {/* Servicios activos */}
+            {activeServices.length > 0 && (
+                <section className="active-services-section">
+                    <h2 className="section-title-delivery">
+                        <Truck size={20} />
+                        Servicio Activo
+                    </h2>
+                    {activeServices.map(service => (
+                        <div key={service.id} className="service-card active">
+                            <div className="service-header">
+                  <span className={`service-badge ${service.status}`}>
+                    {RequestStatusInfo[service.status]?.label || service.status}
+                  </span>
+                                <span className="service-cost">{formatCostCOP(service.estimatedCost)}</span>
+                            </div>
+
+                            <div className="service-route">
+                                <div className={`route-point pickup ${service.status === 'accepted' ? 'active' : 'completed'}`}>
+                                    <MapPin size={16} />
+                                    <div className="route-info">
+                                        <span className="route-label">Recoger en</span>
+                                        <span className="route-address">{service.pickupAddress}</span>
+                                    </div>
+                                </div>
+                                <div className="route-line"></div>
+                                <div className={`route-point delivery ${['in_transit', 'delivered'].includes(service.status) ? 'active' : ''}`}>
+                                    <Navigation size={16} />
+                                    <div className="route-info">
+                                        <span className="route-label">Entregar en</span>
+                                        <span className="route-address">{service.deliveryAddress}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="service-contact">
+                                <Phone size={16} />
+                                <span>{service.deliveryContactName}</span>
+                                <a href={`tel:${service.deliveryPhone}`} className="call-btn">
+                                    Llamar
+                                </a>
+                            </div>
+
+                            {/* Botón de estado */}
+                            <div className="status-action-container">
+                                {service.status === 'accepted' && (
+                                    <button
+                                        className="status-action-btn picked_up"
+                                        onClick={() => handleUpdateStatus(service, 'picked_up')}
+                                        disabled={isProcessingService}
+                                    >
+                                        {isProcessingService ? <Loader2 size={20} className="spinning" /> : <Package size={20} />}
+                                        <span>Marcar como Recogido</span>
+                                    </button>
+                                )}
+                                {service.status === 'picked_up' && (
+                                    <button
+                                        className="status-action-btn in_transit"
+                                        onClick={() => handleUpdateStatus(service, 'in_transit')}
+                                        disabled={isProcessingService}
+                                    >
+                                        {isProcessingService ? <Loader2 size={20} className="spinning" /> : <Truck size={20} />}
+                                        <span>En Camino</span>
+                                    </button>
+                                )}
+                                {service.status === 'in_transit' && (
+                                    <button
+                                        className="status-action-btn delivered"
+                                        onClick={() => handleUpdateStatus(service, 'delivered')}
+                                        disabled={isProcessingService}
+                                    >
+                                        {isProcessingService ? <Loader2 size={20} className="spinning" /> : <Check size={20} />}
+                                        <span>Marcar como Entregado</span>
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </section>
+            )}
+
+            {/* Sistema de Cola */}
+            {!activeServices.length && !pendingServices.length && (
+                <>
+                    {/* Estado actual */}
+                    <section className="queue-status-section">
+                        <div className={`queue-status-card ${isInQueue ? 'in-queue' : 'not-in-queue'}`}>
+                            <div className="queue-status-icon">
+                                {isInQueue ? <CheckCircle size={48} /> : <Hand size={48} />}
+                            </div>
+                            <h2>{isInQueue ? 'En Turno' : 'Sin Turno'}</h2>
+                            <p>
+                                {isInQueue
+                                    ? 'Estás en la fila del paradero'
+                                    : 'Toma tu turno para recibir pedidos'}
+                            </p>
+                        </div>
+                    </section>
+
+                    {/* Botón tomar/salir turno */}
+                    {!isInQueue ? (
+                        <button
+                            className="queue-action-btn join"
+                            onClick={handleJoinQueue}
+                            disabled={isJoiningQueue}
+                        >
+                            {isJoiningQueue ? (
+                                <Loader2 size={20} className="spinning" />
+                            ) : (
+                                <Hand size={20} />
+                            )}
+                            <span>{isJoiningQueue ? 'Tomando turno...' : 'Tomar Turno'}</span>
+                        </button>
+                    ) : (
+                        <>
+                            {/* Mi posición */}
+                            <section className="my-position-section">
+                                <h3 className="section-subtitle">
+                                    <span className="position-icon">#</span>
+                                    Tu Turno Asignado
+                                </h3>
+                                <div className="position-card">
+                                    <div className="position-main">
+                                        <span className="position-label">Posición</span>
+                                        <span className="position-number">#{currentQueue?.position || '-'}</span>
+                                    </div>
+                                    <div className="position-divider"></div>
+                                    <div className="position-info">
+                                        <span className="position-label">Domiciliarios adelante</span>
+                                        <span className="position-value">{Math.max(0, (currentQueue?.position || 1) - 1)}</span>
+                                    </div>
+                                    <div className="position-status">
+                                        <span className="status-dot"></span>
+                                        <span>{currentQueue?.position === 1 ? 'Eres el siguiente' : 'Esperando tu turno'}</span>
+                                    </div>
+                                </div>
+                            </section>
+
+                            {/* Lista de la cola */}
+                            <section className="queue-list-section">
+                                <div className="section-header-delivery">
+                                    <h3 className="section-subtitle">
+                                        <Users size={18} />
+                                        Domiciliarios en el Paradero
+                                    </h3>
+                                    <span className="queue-count">{queueList.length}</span>
+                                </div>
+
+                                {queueList.length === 0 ? (
+                                    <div className="queue-empty">
+                                        <Truck size={40} />
+                                        <p>Eres el único en el paradero</p>
+                                    </div>
+                                ) : (
+                                    <div className="queue-list">
+                                        {queueList.map(queue => (
+                                            <div
+                                                key={queue.id}
+                                                className={`queue-item ${queue.deliveryPersonId === user?.uid ? 'is-me' : ''}`}
+                                            >
+                                                <div className="queue-position">
+                                                    {queue.position}
+                                                </div>
+                                                <div className="queue-info">
+                            <span className="queue-name">
+                              {queue.deliveryPersonName}
+                                {queue.deliveryPersonId === user?.uid && (
+                                    <span className="you-badge">(Tú)</span>
+                                )}
+                            </span>
+                                                    <span className="queue-vehicle">
+                              {queue.vehicleType === 'motorcycle' ? '🏍️' : queue.vehicleType === 'bicycle' ? '🚲' : '🚗'}
+                                                        {' '}{queue.vehiclePlate}
+                            </span>
+                                                </div>
+                                                <div className="queue-time">
+                                                    <span>{formatTimeInQueue(queue.joinedAt)}</span>
+                                                    <span className="time-label">en turno</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </section>
+
+                            {/* Botón salir */}
+                            <button
+                                className="queue-action-btn leave"
+                                onClick={handleLeaveQueue}
+                                disabled={isLeavingQueue}
+                            >
+                                {isLeavingQueue ? (
+                                    <Loader2 size={20} className="spinning" />
+                                ) : (
+                                    <X size={20} />
+                                )}
+                                <span>{isLeavingQueue ? 'Saliendo...' : 'Salir del Turno'}</span>
+                            </button>
+                        </>
+                    )}
+                </>
+            )}
+        </>
+    );
+
     return (
         <div className="delivery-dashboard">
             <div className="dashboard-container">
-                {/* Header */}
-                <section className="delivery-header">
-                    <div className="delivery-welcome">
-                        <h1 className="welcome-title">
-                            ¡Hola, {user?.firstName || 'Domiciliario'}! 🏍️
-                        </h1>
-                        <p className="welcome-subtitle">
-                            {isInQueue
-                                ? `Estás en la posición #${currentQueue?.position || '-'} de la cola`
-                                : 'Toma tu turno para recibir pedidos'}
-                        </p>
-                    </div>
-                    <button className="refresh-btn" onClick={handleRefresh} disabled={isLoading}>
-                        <RefreshCw size={20} className={isLoading ? 'spinning' : ''} />
-                    </button>
-                </section>
-
                 {/* Mensajes de éxito/error */}
                 {error && (
                     <div className="alert alert-error">
@@ -380,278 +920,10 @@ const DeliveryDashboard = () => {
                     </div>
                 )}
 
-                {/* Servicios pendientes de aceptar */}
-                {pendingServices.length > 0 && (
-                    <section className="pending-services-section">
-                        <h2 className="section-title-delivery">
-                            <Package size={20} />
-                            Nuevo Servicio Asignado
-                        </h2>
-                        {pendingServices.map(service => (
-                            <div key={service.id} className="service-card pending">
-                                <div className="service-header">
-                                    <span className="service-badge assigned">Nuevo Servicio</span>
-                                    <span className="service-cost">{formatCostCOP(service.estimatedCost)}</span>
-                                </div>
-
-                                <div className="service-route">
-                                    <div className="route-point pickup">
-                                        <MapPin size={16} />
-                                        <div className="route-info">
-                                            <span className="route-label">Recoger en</span>
-                                            <span className="route-address">{service.pickupAddress}</span>
-                                            <span className="route-neighborhood">{service.pickupNeighborhood}</span>
-                                        </div>
-                                    </div>
-                                    <div className="route-line"></div>
-                                    <div className="route-point delivery">
-                                        <Navigation size={16} />
-                                        <div className="route-info">
-                                            <span className="route-label">Entregar en</span>
-                                            <span className="route-address">{service.deliveryAddress}</span>
-                                            <span className="route-neighborhood">{service.deliveryNeighborhood}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="service-details">
-                                    <div className="detail-item">
-                                        <Package size={14} />
-                                        <span>{service.itemDescription}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <Phone size={14} />
-                                        <span>{service.deliveryContactName} - {service.deliveryPhone}</span>
-                                    </div>
-                                </div>
-
-                                <div className="service-actions">
-                                    <button
-                                        className="action-btn reject"
-                                        onClick={() => handleRejectService(service)}
-                                        disabled={isProcessingService}
-                                    >
-                                        <XCircle size={18} />
-                                        <span>Rechazar</span>
-                                    </button>
-                                    <button
-                                        className="action-btn accept"
-                                        onClick={() => handleAcceptService(service)}
-                                        disabled={isProcessingService}
-                                    >
-                                        {isProcessingService ? <Loader2 size={18} className="spinning" /> : <Check size={18} />}
-                                        <span>Aceptar</span>
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </section>
-                )}
-
-                {/* Servicios activos */}
-                {activeServices.length > 0 && (
-                    <section className="active-services-section">
-                        <h2 className="section-title-delivery">
-                            <Truck size={20} />
-                            Servicio Activo
-                        </h2>
-                        {activeServices.map(service => (
-                            <div key={service.id} className="service-card active">
-                                <div className="service-header">
-                  <span className={`service-badge ${service.status}`}>
-                    {RequestStatusInfo[service.status]?.label || service.status}
-                  </span>
-                                    <span className="service-cost">{formatCostCOP(service.estimatedCost)}</span>
-                                </div>
-
-                                <div className="service-route">
-                                    <div className={`route-point pickup ${service.status === 'accepted' ? 'active' : 'completed'}`}>
-                                        <MapPin size={16} />
-                                        <div className="route-info">
-                                            <span className="route-label">Recoger en</span>
-                                            <span className="route-address">{service.pickupAddress}</span>
-                                        </div>
-                                    </div>
-                                    <div className="route-line"></div>
-                                    <div className={`route-point delivery ${['in_transit', 'delivered'].includes(service.status) ? 'active' : ''}`}>
-                                        <Navigation size={16} />
-                                        <div className="route-info">
-                                            <span className="route-label">Entregar en</span>
-                                            <span className="route-address">{service.deliveryAddress}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="service-contact">
-                                    <Phone size={16} />
-                                    <span>{service.deliveryContactName}</span>
-                                    <a href={`tel:${service.deliveryPhone}`} className="call-btn">
-                                        Llamar
-                                    </a>
-                                </div>
-
-                                {/* Botones de estado */}
-                                <div className="status-actions">
-                                    {service.status === 'accepted' && (
-                                        <button
-                                            className="status-btn"
-                                            onClick={() => handleUpdateStatus(service, 'picked_up')}
-                                            disabled={isProcessingService}
-                                        >
-                                            <Package size={18} />
-                                            <span>Marcar como Recogido</span>
-                                            <ChevronRight size={18} />
-                                        </button>
-                                    )}
-                                    {service.status === 'picked_up' && (
-                                        <button
-                                            className="status-btn"
-                                            onClick={() => handleUpdateStatus(service, 'in_transit')}
-                                            disabled={isProcessingService}
-                                        >
-                                            <Truck size={18} />
-                                            <span>En Camino</span>
-                                            <ChevronRight size={18} />
-                                        </button>
-                                    )}
-                                    {service.status === 'in_transit' && (
-                                        <button
-                                            className="status-btn success"
-                                            onClick={() => handleUpdateStatus(service, 'delivered')}
-                                            disabled={isProcessingService}
-                                        >
-                                            <Check size={18} />
-                                            <span>Marcar como Entregado</span>
-                                            <ChevronRight size={18} />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))}
-                    </section>
-                )}
-
-                {/* Sistema de Cola */}
-                {!activeServices.length && !pendingServices.length && (
-                    <>
-                        {/* Estado actual */}
-                        <section className="queue-status-section">
-                            <div className={`queue-status-card ${isInQueue ? 'in-queue' : 'not-in-queue'}`}>
-                                <div className="queue-status-icon">
-                                    {isInQueue ? <CheckCircle size={48} /> : <Hand size={48} />}
-                                </div>
-                                <h2>{isInQueue ? 'En Turno' : 'Sin Turno'}</h2>
-                                <p>
-                                    {isInQueue
-                                        ? 'Estás en la fila del paradero'
-                                        : 'Toma tu turno para recibir pedidos'}
-                                </p>
-                            </div>
-                        </section>
-
-                        {/* Botón tomar/salir turno */}
-                        {!isInQueue ? (
-                            <button
-                                className="queue-action-btn join"
-                                onClick={handleJoinQueue}
-                                disabled={isJoiningQueue}
-                            >
-                                {isJoiningQueue ? (
-                                    <Loader2 size={20} className="spinning" />
-                                ) : (
-                                    <Hand size={20} />
-                                )}
-                                <span>{isJoiningQueue ? 'Tomando turno...' : 'Tomar Turno'}</span>
-                            </button>
-                        ) : (
-                            <>
-                                {/* Mi posición */}
-                                <section className="my-position-section">
-                                    <h3 className="section-subtitle">
-                                        <span className="position-icon">#</span>
-                                        Tu Turno Asignado
-                                    </h3>
-                                    <div className="position-card">
-                                        <div className="position-main">
-                                            <span className="position-label">Posición</span>
-                                            <span className="position-number">#{currentQueue?.position || '-'}</span>
-                                        </div>
-                                        <div className="position-divider"></div>
-                                        <div className="position-info">
-                                            <span className="position-label">Domiciliarios adelante</span>
-                                            <span className="position-value">{Math.max(0, (currentQueue?.position || 1) - 1)}</span>
-                                        </div>
-                                        <div className="position-status">
-                                            <span className="status-dot"></span>
-                                            <span>{currentQueue?.position === 1 ? 'Eres el siguiente' : 'Esperando tu turno'}</span>
-                                        </div>
-                                    </div>
-                                </section>
-
-                                {/* Lista de la cola */}
-                                <section className="queue-list-section">
-                                    <div className="section-header-delivery">
-                                        <h3 className="section-subtitle">
-                                            <Users size={18} />
-                                            Domiciliarios en el Paradero
-                                        </h3>
-                                        <span className="queue-count">{queueList.length}</span>
-                                    </div>
-
-                                    {queueList.length === 0 ? (
-                                        <div className="queue-empty">
-                                            <Truck size={40} />
-                                            <p>Eres el único en el paradero</p>
-                                        </div>
-                                    ) : (
-                                        <div className="queue-list">
-                                            {queueList.map(queue => (
-                                                <div
-                                                    key={queue.id}
-                                                    className={`queue-item ${queue.deliveryPersonId === user?.uid ? 'is-me' : ''}`}
-                                                >
-                                                    <div className="queue-position">
-                                                        {queue.position}
-                                                    </div>
-                                                    <div className="queue-info">
-                            <span className="queue-name">
-                              {queue.deliveryPersonName}
-                                {queue.deliveryPersonId === user?.uid && (
-                                    <span className="you-badge">(Tú)</span>
-                                )}
-                            </span>
-                                                        <span className="queue-vehicle">
-                              {queue.vehicleType === 'motorcycle' ? '🏍️' : queue.vehicleType === 'bicycle' ? '🚲' : '🚗'}
-                                                            {' '}{queue.vehiclePlate}
-                            </span>
-                                                    </div>
-                                                    <div className="queue-time">
-                                                        <span>{formatTimeInQueue(queue.joinedAt)}</span>
-                                                        <span className="time-label">en turno</span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </section>
-
-                                {/* Botón salir */}
-                                <button
-                                    className="queue-action-btn leave"
-                                    onClick={handleLeaveQueue}
-                                    disabled={isLeavingQueue}
-                                >
-                                    {isLeavingQueue ? (
-                                        <Loader2 size={20} className="spinning" />
-                                    ) : (
-                                        <X size={20} />
-                                    )}
-                                    <span>{isLeavingQueue ? 'Saliendo...' : 'Salir del Turno'}</span>
-                                </button>
-                            </>
-                        )}
-                    </>
-                )}
+                {/* Renderizar vista según currentView */}
+                {currentView === 'inicio' && renderHomeView()}
+                {currentView === 'entregas' && renderDeliveriesView()}
+                {currentView === 'ganancias' && renderEarningsView()}
             </div>
         </div>
     );

@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { User, MessageCircle, ChevronDown, Menu, X, LogOut, Settings, Truck } from 'lucide-react';
+import { User, MessageCircle, ChevronDown, Menu, X, LogOut } from 'lucide-react';
 import LoginPanel from '../LoginPanel';
 import SearchBar from '../SearchBar';
 import SupportPanel from '../SupportPanel';
@@ -47,9 +47,9 @@ const deliveryNavItems: NavItem[] = [
 // Nav items para administradores
 const adminNavItems: NavItem[] = [
     { label: 'Resumen' },
+    { label: 'Servicios' },
+    { label: 'Clientes' },
     { label: 'Domiciliarios' },
-    { label: 'Usuarios' },
-    { label: 'Configuración' },
 ];
 
 const Navbar = () => {
@@ -61,7 +61,6 @@ const Navbar = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [isSearchExpanded, setIsSearchExpanded] = useState(false);
     const [isSupportOpen, setIsSupportOpen] = useState(false);
-    const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
 
     // Obtener items de navegación según el rol
@@ -101,7 +100,6 @@ const Navbar = () => {
             else if (currentScrollY > lastScrollY && currentScrollY > 100) {
                 setIsHidden(true);
                 setIsMobileMenuOpen(false);
-                setIsUserMenuOpen(false);
             }
             else if (currentScrollY < lastScrollY) {
                 setIsHidden(false);
@@ -136,24 +134,6 @@ const Navbar = () => {
             setIsSearchExpanded(false);
         }
     }, [lastScrollY, isSearchExpanded]);
-
-    // Cerrar menú de usuario al hacer click fuera
-    useEffect(() => {
-        const handleClickOutside = (e: MouseEvent) => {
-            const target = e.target as HTMLElement;
-            if (!target.closest('.user-menu-container')) {
-                setIsUserMenuOpen(false);
-            }
-        };
-
-        if (isUserMenuOpen) {
-            document.addEventListener('click', handleClickOutside);
-        }
-
-        return () => {
-            document.removeEventListener('click', handleClickOutside);
-        };
-    }, [isUserMenuOpen]);
 
     const handleMouseEnter = (label: string) => {
         setActiveDropdown(label);
@@ -192,7 +172,6 @@ const Navbar = () => {
     };
 
     const handleLogout = async () => {
-        setIsUserMenuOpen(false);
         await logout();
     };
 
@@ -203,16 +182,6 @@ const Navbar = () => {
             case 'delivery': return 'Domiciliario';
             case 'admin': return 'Administrador';
             default: return '';
-        }
-    };
-
-    const getRoleIcon = () => {
-        if (!user) return <User size={18} />;
-        switch (user.role) {
-            case 'user': return <User size={18} />;
-            case 'delivery': return <Truck size={18} />;
-            case 'admin': return <Settings size={18} />;
-            default: return <User size={18} />;
         }
     };
 
@@ -293,64 +262,58 @@ const Navbar = () => {
                         )}
 
                         {isAuthenticated ? (
-                            /* User Menu for authenticated users */
-                            <div className="user-menu-container">
+                            /* Action buttons for authenticated users */
+                            <>
                                 <button
-                                    className={`user-menu-btn ${isUserMenuOpen ? 'active' : ''}`}
-                                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                                    className={`action-btn ${isProfileOpen ? 'action-btn-active' : ''}`}
+                                    aria-label="Mi Perfil"
+                                    onClick={() => setIsProfileOpen(true)}
+                                    title="Mi Perfil"
                                 >
-                                    <div className="user-avatar">
-                                        {user?.firstName?.charAt(0) || 'U'}
-                                    </div>
-                                    <span className="user-name">{user?.firstName || 'Usuario'}</span>
-                                    <ChevronDown size={16} className={`user-menu-chevron ${isUserMenuOpen ? 'rotated' : ''}`} />
+                                    <User size={22} strokeWidth={1.5} />
                                 </button>
 
-                                {isUserMenuOpen && (
-                                    <div className="user-menu-dropdown">
-                                        <div className="user-menu-header">
-                                            <div className="user-menu-avatar">
-                                                {user?.firstName?.charAt(0) || 'U'}
-                                            </div>
-                                            <div className="user-menu-info">
-                                                <span className="user-menu-name">{user?.firstName} {user?.lastName}</span>
-                                                <span className="user-menu-email">{user?.email}</span>
-                                            </div>
-                                        </div>
-                                        <div className="user-menu-divider"></div>
-                                        <button className="user-menu-item" onClick={() => {
-                                            setIsUserMenuOpen(false);
-                                            setIsProfileOpen(true);
-                                        }}>
-                                            {getRoleIcon()}
-                                            <span>Mi Perfil</span>
-                                        </button>
-                                        <div className="user-menu-divider"></div>
-                                        <button className="user-menu-item logout" onClick={handleLogout}>
-                                            <LogOut size={18} />
-                                            <span>Cerrar Sesión</span>
-                                        </button>
-                                    </div>
+                                {/* Mostrar soporte solo para usuarios y admins, no para domiciliarios */}
+                                {user?.role !== 'delivery' && (
+                                    <button
+                                        className={`action-btn action-btn-chat ${isSupportOpen ? 'action-btn-active' : ''}`}
+                                        aria-label="Soporte"
+                                        onClick={handleSupportOpen}
+                                        title="Soporte"
+                                    >
+                                        <MessageCircle size={22} strokeWidth={1.5} />
+                                    </button>
                                 )}
-                            </div>
+
+                                <button
+                                    className="action-btn action-btn-logout"
+                                    aria-label="Cerrar Sesión"
+                                    onClick={handleLogout}
+                                    title="Cerrar Sesión"
+                                >
+                                    <LogOut size={22} strokeWidth={1.5} />
+                                </button>
+                            </>
                         ) : (
                             /* Login button for non-authenticated users */
-                            <button
-                                className={`action-btn ${isLoginOpen ? 'action-btn-active' : ''}`}
-                                aria-label="Account"
-                                onClick={handleLoginOpen}
-                            >
-                                <User size={22} strokeWidth={1.5} />
-                            </button>
-                        )}
+                            <>
+                                <button
+                                    className={`action-btn ${isLoginOpen ? 'action-btn-active' : ''}`}
+                                    aria-label="Account"
+                                    onClick={handleLoginOpen}
+                                >
+                                    <User size={22} strokeWidth={1.5} />
+                                </button>
 
-                        <button
-                            className={`action-btn action-btn-chat ${isSupportOpen ? 'action-btn-active' : ''}`}
-                            aria-label="Soporte"
-                            onClick={handleSupportOpen}
-                        >
-                            <MessageCircle size={22} strokeWidth={1.5} />
-                        </button>
+                                <button
+                                    className={`action-btn action-btn-chat ${isSupportOpen ? 'action-btn-active' : ''}`}
+                                    aria-label="Soporte"
+                                    onClick={handleSupportOpen}
+                                >
+                                    <MessageCircle size={22} strokeWidth={1.5} />
+                                </button>
+                            </>
+                        )}
 
                         {/* Mobile Menu Button */}
                         <button
@@ -439,7 +402,7 @@ const Navbar = () => {
             <LoginPanel isOpen={isLoginOpen} onClose={handleLoginClose} />
 
             {/* Support Panel */}
-            <SupportPanel isOpen={isSupportOpen} onClose={handleSupportClose} />
+            <SupportPanel isOpen={isSupportOpen} onClose={handleSupportClose} userRole={user?.role} />
 
             {/* Profile Panel */}
             <ProfilePanel isOpen={isProfileOpen} onClose={() => setIsProfileOpen(false)} />

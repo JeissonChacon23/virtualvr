@@ -320,11 +320,7 @@
 }
 
 .order-status-indicator {
-    width: 12px;
-    height: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-shrink: 0;
 }
 
 .status-dot {
