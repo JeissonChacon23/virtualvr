@@ -19,7 +19,9 @@ import {
     CreditCard,
     Settings,
     AlertCircle,
-    Loader2
+    Loader2,
+    Eye,
+    EyeOff
 } from 'lucide-react';
 import { authService } from '../../services/auth.service';
 import type {
@@ -66,6 +68,8 @@ const RegisterForm = ({ userType, onBack, onSuccess }: RegisterFormProps) => {
     const [currentStep, setCurrentStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     // Form data state
     const [formData, setFormData] = useState({
@@ -302,26 +306,46 @@ const RegisterForm = ({ userType, onBack, onSuccess }: RegisterFormProps) => {
                                 <Lock size={16} />
                                 <span>Contraseña</span>
                             </label>
-                            <input
-                                type="password"
-                                className="register-input"
-                                placeholder="Mínimo 6 caracteres"
-                                value={formData.password}
-                                onChange={(e) => updateFormData('password', e.target.value)}
-                            />
+                            <div className="register-input-wrapper">
+                                <input
+                                    type={showPassword ? 'text' : 'password'}
+                                    className="register-input register-input-password"
+                                    placeholder="Mínimo 6 caracteres"
+                                    value={formData.password}
+                                    onChange={(e) => updateFormData('password', e.target.value)}
+                                />
+                                <button
+                                    type="button"
+                                    className="register-password-toggle"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                >
+                                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
                         </div>
                         <div className="register-input-group">
                             <label className="register-label">
                                 <Lock size={16} />
                                 <span>Confirmar contraseña</span>
                             </label>
-                            <input
-                                type="password"
-                                className="register-input"
-                                placeholder="Repite tu contraseña"
-                                value={formData.confirmPassword}
-                                onChange={(e) => updateFormData('confirmPassword', e.target.value)}
-                            />
+                            <div className="register-input-wrapper">
+                                <input
+                                    type={showConfirmPassword ? 'text' : 'password'}
+                                    className="register-input register-input-password"
+                                    placeholder="Repite tu contraseña"
+                                    value={formData.confirmPassword}
+                                    onChange={(e) => updateFormData('confirmPassword', e.target.value)}
+                                />
+                                <button
+                                    type="button"
+                                    className="register-password-toggle"
+                                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                    aria-label={showConfirmPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                >
+                                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 );

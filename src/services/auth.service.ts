@@ -5,7 +5,10 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    reauthenticateWithCredential,
+    EmailAuthProvider,
+    updatePassword
 } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -53,6 +56,26 @@ class AuthService {
     async signOut(): Promise<void> {
         try {
             await signOut(auth);
+        } catch (error: unknown) {
+            throw this.handleAuthError(error);
+        }
+    }
+
+    // Change password for current user
+    async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+        try {
+            const user = auth.currentUser;
+
+            if (!user || !user.email) {
+                throw new Error('No hay usuario autenticado');
+            }
+
+            // Re-authenticate user with current password
+            const credential = EmailAuthProvider.credential(user.email, currentPassword);
+            await reauthenticateWithCredential(user, credential);
+
+            // Update password
+            await updatePassword(user, newPassword);
         } catch (error: unknown) {
             throw this.handleAuthError(error);
         }

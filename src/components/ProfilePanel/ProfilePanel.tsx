@@ -18,11 +18,18 @@ import {
     Save,
     Truck,
     Car,
-    Bike
+    Bike,
+    Lock,
+    Eye,
+    EyeOff,
+    Loader2,
+    AlertCircle,
+    CheckCircle
 } from 'lucide-react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase.config';
 import { useAuth } from '../../context/AuthContext';
+import { authService } from '../../services/auth.service';
 import './ProfilePanel.css';
 
 interface ProfilePanelProps {
@@ -72,6 +79,18 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
         address: '',
         neighborhood: ''
     });
+
+    // Estados para cambio de contraseña
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
+    const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+    const [showNewPassword, setShowNewPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    const [passwordError, setPasswordError] = useState<string | null>(null);
+    const [passwordSuccess, setPasswordSuccess] = useState(false);
 
     // Determinar la colección según el rol
     const getCollectionName = (): string => {
@@ -249,6 +268,74 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
             });
         }
         setIsEditing(false);
+    };
+
+    // Funciones para cambio de contraseña
+    const openPasswordModal = () => {
+        setShowPasswordModal(true);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setPasswordError(null);
+        setPasswordSuccess(false);
+        setShowCurrentPassword(false);
+        setShowNewPassword(false);
+        setShowConfirmPassword(false);
+    };
+
+    const closePasswordModal = () => {
+        setShowPasswordModal(false);
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmNewPassword('');
+        setPasswordError(null);
+        setPasswordSuccess(false);
+    };
+
+    const handleChangePassword = async () => {
+        setPasswordError(null);
+
+        // Validaciones
+        if (!currentPassword) {
+            setPasswordError('Ingresa tu contraseña actual');
+            return;
+        }
+
+        if (!newPassword) {
+            setPasswordError('Ingresa la nueva contraseña');
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            setPasswordError('La nueva contraseña debe tener al menos 6 caracteres');
+            return;
+        }
+
+        if (newPassword !== confirmNewPassword) {
+            setPasswordError('Las contraseñas no coinciden');
+            return;
+        }
+
+        if (currentPassword === newPassword) {
+            setPasswordError('La nueva contraseña debe ser diferente a la actual');
+            return;
+        }
+
+        setIsChangingPassword(true);
+
+        try {
+            await authService.changePassword(currentPassword, newPassword);
+            setPasswordSuccess(true);
+
+            // Cerrar modal después de 2 segundos
+            setTimeout(() => {
+                closePasswordModal();
+            }, 2000);
+        } catch (error) {
+            setPasswordError(error instanceof Error ? error.message : 'Error al cambiar la contraseña');
+        } finally {
+            setIsChangingPassword(false);
+        }
     };
 
     return (
@@ -494,8 +581,9 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
                         {/* Security Section */}
                         <div className="profile-section">
                             <h3 className="profile-section-title">Seguridad</h3>
-                            <button className="profile-password-btn">
-                                Cambiar contraseña
+                            <button className="profile-password-btn" onClick={openPasswordModal}>
+                                <Lock size={18} />
+                                <span>Cambiar contraseña</span>
                             </button>
                         </div>
                     </>
@@ -506,6 +594,137 @@ const ProfilePanel = ({ isOpen, onClose }: ProfilePanelProps) => {
                     </div>
                 )}
             </div>
+
+            {/* Modal de cambio de contraseña */}
+            {showPasswordModal && (
+                <div className="password-modal-overlay" onClick={closePasswordModal}>
+                    <div className="password-modal" onClick={(e) => e.stopPropagation()}>
+                        <button className="password-modal-close" onClick={closePasswordModal}>
+                            <X size={20} />
+                        </button>
+
+                        <div className="password-modal-header">
+                            <div className="password-modal-icon">
+                                <Lock size={24} />
+                            </div>
+                            <h3>Cambiar contraseña</h3>
+                            <p>Ingresa tu contraseña actual y la nueva contraseña</p>
+                        </div>
+
+                        {/* Mensaje de éxito */}
+                        {passwordSuccess && (
+                            <div className="password-success">
+                                <CheckCircle size={18} />
+                                <span>¡Contraseña actualizada correctamente!</span>
+                            </div>
+                        )}
+
+                        {/* Mensaje de error */}
+                        {passwordError && (
+                            <div className="password-error">
+                                <AlertCircle size={18} />
+                                <span>{passwordError}</span>
+                            </div>
+                        )}
+
+                        {!passwordSuccess && (
+                            <>
+                                <div className="password-form">
+                                    {/* Contraseña actual */}
+                                    <div className="password-field">
+                                        <label>Contraseña actual</label>
+                                        <div className="password-input-wrapper">
+                                            <input
+                                                type={showCurrentPassword ? 'text' : 'password'}
+                                                value={currentPassword}
+                                                onChange={(e) => setCurrentPassword(e.target.value)}
+                                                placeholder="Ingresa tu contraseña actual"
+                                                disabled={isChangingPassword}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="password-toggle"
+                                                onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                                            >
+                                                {showCurrentPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Nueva contraseña */}
+                                    <div className="password-field">
+                                        <label>Nueva contraseña</label>
+                                        <div className="password-input-wrapper">
+                                            <input
+                                                type={showNewPassword ? 'text' : 'password'}
+                                                value={newPassword}
+                                                onChange={(e) => setNewPassword(e.target.value)}
+                                                placeholder="Mínimo 6 caracteres"
+                                                disabled={isChangingPassword}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="password-toggle"
+                                                onClick={() => setShowNewPassword(!showNewPassword)}
+                                            >
+                                                {showNewPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Confirmar nueva contraseña */}
+                                    <div className="password-field">
+                                        <label>Confirmar nueva contraseña</label>
+                                        <div className="password-input-wrapper">
+                                            <input
+                                                type={showConfirmPassword ? 'text' : 'password'}
+                                                value={confirmNewPassword}
+                                                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                                placeholder="Repite tu nueva contraseña"
+                                                disabled={isChangingPassword}
+                                            />
+                                            <button
+                                                type="button"
+                                                className="password-toggle"
+                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            >
+                                                {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="password-modal-actions">
+                                    <button
+                                        className="password-cancel-btn"
+                                        onClick={closePasswordModal}
+                                        disabled={isChangingPassword}
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        className="password-submit-btn"
+                                        onClick={handleChangePassword}
+                                        disabled={isChangingPassword}
+                                    >
+                                        {isChangingPassword ? (
+                                            <>
+                                                <Loader2 size={18} className="spinning" />
+                                                <span>Cambiando...</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Check size={18} />
+                                                <span>Cambiar contraseña</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+            )}
         </>
     );
 };

@@ -24,7 +24,10 @@ import {
     Calendar,
     DollarSign,
     Filter,
-    Route
+    Route,
+    TrendingUp,
+    Banknote,
+    ArrowUpRight
 } from 'lucide-react';
 import { useAuth } from '../../../context/AuthContext';
 import { doc, getDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -39,6 +42,7 @@ import './DeliveryDashboard.css';
 
 type ViewType = 'inicio' | 'entregas' | 'ganancias';
 type DeliveryFilterType = 'all' | 'completed' | 'cancelled';
+type EarningsPeriodType = 'today' | 'week' | 'month' | 'all';
 
 const DeliveryDashboard = () => {
     const { user } = useAuth();
@@ -58,6 +62,9 @@ const DeliveryDashboard = () => {
     const [deliveryHistory, setDeliveryHistory] = useState<DeliveryRequest[]>([]);
     const [historyFilter, setHistoryFilter] = useState<DeliveryFilterType>('all');
     const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+
+    // Estado para filtro de ganancias
+    const [earningsPeriod, setEarningsPeriod] = useState<EarningsPeriodType>('month');
 
     // Estados de UI
     const [isLoading, setIsLoading] = useState(true);
@@ -587,23 +594,259 @@ const DeliveryDashboard = () => {
         </>
     );
 
-    // Vista de Ganancias (placeholder)
-    const renderEarningsView = () => (
-        <>
-            <section className="delivery-header">
-                <div className="delivery-welcome">
-                    <h1 className="welcome-title">Mis Ganancias 💰</h1>
-                    <p className="welcome-subtitle">Resumen de tus ingresos</p>
-                </div>
-            </section>
+    // Vista de Ganancias
+    const renderEarningsView = () => {
+        // Filtrar entregas completadas para ganancias
+        const completedDeliveries = deliveryHistory.filter(d =>
+            d.status === 'completed' || d.status === 'delivered'
+        );
 
-            <div className="coming-soon">
-                <DollarSign size={48} />
-                <h3>Próximamente</h3>
-                <p>El módulo de ganancias estará disponible pronto</p>
-            </div>
-        </>
-    );
+        // Funciones de ayuda para fechas
+        const isToday = (date: Date) => {
+            const today = new Date();
+            return date.getDate() === today.getDate() &&
+                date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear();
+        };
+
+        const isThisWeek = (date: Date) => {
+            const today = new Date();
+            const startOfWeek = new Date(today);
+            startOfWeek.setDate(today.getDate() - today.getDay());
+            startOfWeek.setHours(0, 0, 0, 0);
+            return date >= startOfWeek;
+        };
+
+        const isThisMonth = (date: Date) => {
+            const today = new Date();
+            return date.getMonth() === today.getMonth() &&
+                date.getFullYear() === today.getFullYear();
+        };
+
+        // Filtrar según período seleccionado
+        const filteredDeliveries = completedDeliveries.filter(d => {
+            const deliveryDate = d.deliveredAt || d.completedAt || d.createdAt;
+            switch (earningsPeriod) {
+                case 'today': return isToday(deliveryDate);
+                case 'week': return isThisWeek(deliveryDate);
+                case 'month': return isThisMonth(deliveryDate);
+                default: return true;
+            }
+        });
+
+        // Calcular estadísticas
+        const todayEarnings = completedDeliveries
+            .filter(d => isToday(d.deliveredAt || d.completedAt || d.createdAt))
+            .reduce((sum, d) => sum + (d.finalCost || d.estimatedCost), 0);
+
+        const weekEarnings = completedDeliveries
+            .filter(d => isThisWeek(d.deliveredAt || d.completedAt || d.createdAt))
+            .reduce((sum, d) => sum + (d.finalCost || d.estimatedCost), 0);
+
+        const monthEarnings = completedDeliveries
+            .filter(d => isThisMonth(d.deliveredAt || d.completedAt || d.createdAt))
+            .reduce((sum, d) => sum + (d.finalCost || d.estimatedCost), 0);
+
+        const totalEarnings = completedDeliveries
+            .reduce((sum, d) => sum + (d.finalCost || d.estimatedCost), 0);
+
+        // Contadores de entregas
+        const todayCount = completedDeliveries.filter(d => isToday(d.deliveredAt || d.completedAt || d.createdAt)).length;
+        const weekCount = completedDeliveries.filter(d => isThisWeek(d.deliveredAt || d.completedAt || d.createdAt)).length;
+        const monthCount = completedDeliveries.filter(d => isThisMonth(d.deliveredAt || d.completedAt || d.createdAt)).length;
+
+        // Promedio por entrega del período seleccionado
+        const avgPerDelivery = filteredDeliveries.length > 0
+            ? filteredDeliveries.reduce((sum, d) => sum + (d.finalCost || d.estimatedCost), 0) / filteredDeliveries.length
+            : 0;
+
+        // Formatear fecha
+        const formatDeliveryDate = (delivery: DeliveryRequest) => {
+            const date = delivery.deliveredAt || delivery.completedAt || delivery.createdAt;
+            return date.toLocaleDateString('es-CO', {
+                day: 'numeric',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        };
+
+        // Obtener título del período
+        const getPeriodTitle = () => {
+            switch (earningsPeriod) {
+                case 'today': return 'Hoy';
+                case 'week': return 'Esta Semana';
+                case 'month': return 'Este Mes';
+                default: return 'Todo el Tiempo';
+            }
+        };
+
+        return (
+            <>
+                <section className="delivery-header">
+                    <div className="delivery-welcome">
+                        <h1 className="welcome-title">Mis Ganancias 💰</h1>
+                        <p className="welcome-subtitle">Resumen de tus ingresos por entregas</p>
+                    </div>
+                </section>
+
+                {/* Estadísticas principales */}
+                <section className="earnings-stats-grid">
+                    <div className="earnings-stat-card highlight">
+                        <div className="earnings-stat-icon">
+                            <DollarSign size={24} />
+                        </div>
+                        <div className="earnings-stat-info">
+                            <span className="earnings-stat-value">{formatCostCOP(monthEarnings)}</span>
+                            <span className="earnings-stat-label">Este mes</span>
+                        </div>
+                        <div className="earnings-stat-badge">
+                            <TrendingUp size={14} />
+                            <span>{monthCount} entregas</span>
+                        </div>
+                    </div>
+
+                    <div className="earnings-stat-card">
+                        <div className="earnings-stat-icon today">
+                            <Calendar size={24} />
+                        </div>
+                        <div className="earnings-stat-info">
+                            <span className="earnings-stat-value">{formatCostCOP(todayEarnings)}</span>
+                            <span className="earnings-stat-label">Hoy</span>
+                        </div>
+                        <span className="earnings-stat-count">{todayCount} entregas</span>
+                    </div>
+
+                    <div className="earnings-stat-card">
+                        <div className="earnings-stat-icon week">
+                            <TrendingUp size={24} />
+                        </div>
+                        <div className="earnings-stat-info">
+                            <span className="earnings-stat-value">{formatCostCOP(weekEarnings)}</span>
+                            <span className="earnings-stat-label">Esta semana</span>
+                        </div>
+                        <span className="earnings-stat-count">{weekCount} entregas</span>
+                    </div>
+
+                    <div className="earnings-stat-card">
+                        <div className="earnings-stat-icon total">
+                            <Banknote size={24} />
+                        </div>
+                        <div className="earnings-stat-info">
+                            <span className="earnings-stat-value">{formatCostCOP(totalEarnings)}</span>
+                            <span className="earnings-stat-label">Total histórico</span>
+                        </div>
+                        <span className="earnings-stat-count">{completedDeliveries.length} entregas</span>
+                    </div>
+                </section>
+
+                {/* Resumen del período */}
+                <section className="earnings-summary-card">
+                    <div className="earnings-summary-header">
+                        <h3>Resumen de {getPeriodTitle()}</h3>
+                        <div className="earnings-period-selector">
+                            <button
+                                className={`period-btn ${earningsPeriod === 'today' ? 'active' : ''}`}
+                                onClick={() => setEarningsPeriod('today')}
+                            >
+                                Hoy
+                            </button>
+                            <button
+                                className={`period-btn ${earningsPeriod === 'week' ? 'active' : ''}`}
+                                onClick={() => setEarningsPeriod('week')}
+                            >
+                                Semana
+                            </button>
+                            <button
+                                className={`period-btn ${earningsPeriod === 'month' ? 'active' : ''}`}
+                                onClick={() => setEarningsPeriod('month')}
+                            >
+                                Mes
+                            </button>
+                            <button
+                                className={`period-btn ${earningsPeriod === 'all' ? 'active' : ''}`}
+                                onClick={() => setEarningsPeriod('all')}
+                            >
+                                Todo
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="earnings-summary-stats">
+                        <div className="summary-stat">
+                            <span className="summary-stat-value">{filteredDeliveries.length}</span>
+                            <span className="summary-stat-label">Entregas completadas</span>
+                        </div>
+                        <div className="summary-stat">
+                            <span className="summary-stat-value">{formatCostCOP(avgPerDelivery)}</span>
+                            <span className="summary-stat-label">Promedio por entrega</span>
+                        </div>
+                        <div className="summary-stat highlight">
+              <span className="summary-stat-value">
+                {formatCostCOP(filteredDeliveries.reduce((sum, d) => sum + (d.finalCost || d.estimatedCost), 0))}
+              </span>
+                            <span className="summary-stat-label">Total {getPeriodTitle().toLowerCase()}</span>
+                        </div>
+                    </div>
+                </section>
+
+                {/* Historial de ganancias */}
+                <section className="earnings-history-section">
+                    <h2 className="section-title-delivery">
+                        <Banknote size={20} />
+                        Detalle de Entregas - {getPeriodTitle()}
+                    </h2>
+
+                    {isLoadingHistory ? (
+                        <div className="earnings-loading">
+                            <Loader2 size={32} className="spinning" />
+                            <p>Cargando historial...</p>
+                        </div>
+                    ) : filteredDeliveries.length === 0 ? (
+                        <div className="earnings-empty">
+                            <DollarSign size={48} />
+                            <h3>Sin entregas en este período</h3>
+                            <p>No tienes entregas completadas {earningsPeriod === 'today' ? 'hoy' : earningsPeriod === 'week' ? 'esta semana' : earningsPeriod === 'month' ? 'este mes' : ''}</p>
+                        </div>
+                    ) : (
+                        <div className="earnings-list">
+                            {filteredDeliveries.map(delivery => (
+                                <div key={delivery.id} className="earnings-item">
+                                    <div className="earnings-item-left">
+                                        <div className="earnings-item-icon">
+                                            <CheckCircle size={20} />
+                                        </div>
+                                        <div className="earnings-item-info">
+                      <span className="earnings-item-route">
+                        {delivery.pickupNeighborhood} → {delivery.deliveryNeighborhood}
+                      </span>
+                                            <span className="earnings-item-date">
+                        <Calendar size={12} />
+                                                {formatDeliveryDate(delivery)}
+                      </span>
+                                            <span className="earnings-item-distance">
+                        <Route size={12} />
+                                                {formatDistance(delivery.distance)}
+                      </span>
+                                        </div>
+                                    </div>
+                                    <div className="earnings-item-right">
+                    <span className="earnings-item-amount">
+                      +{formatCostCOP(delivery.finalCost || delivery.estimatedCost)}
+                    </span>
+                                        <span className="earnings-item-status">
+                      <ArrowUpRight size={14} />
+                      Completada
+                    </span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </section>
+            </>
+        );
+    };
 
     // Vista de Inicio (contenido existente)
     const renderHomeView = () => (

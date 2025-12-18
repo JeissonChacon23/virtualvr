@@ -41,7 +41,6 @@ const deliveryNavItems: NavItem[] = [
     { label: 'Inicio' },
     { label: 'Mis Entregas' },
     { label: 'Ganancias' },
-    { label: 'Mi Perfil' },
 ];
 
 // Nav items para administradores

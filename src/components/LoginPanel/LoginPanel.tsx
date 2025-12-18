@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { X, Mail, Lock, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, Mail, Lock, Loader2, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import RegisterForm from '../RegisterForm';
 import { authService } from '../../services/auth.service';
 import type { UserRole } from '../../models';
@@ -27,6 +27,7 @@ const LoginPanel = ({ isOpen, onClose }: LoginPanelProps) => {
     const [userType, setUserType] = useState<UserType>('usuario');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [showRegister, setShowRegister] = useState(false);
@@ -148,7 +149,7 @@ const LoginPanel = ({ isOpen, onClose }: LoginPanelProps) => {
                                 className={`user-type-btn ${userType === 'administrador' ? 'user-type-btn-active' : ''}`}
                                 onClick={() => handleUserTypeChange('administrador')}
                             >
-                                Administrador
+                                Admin
                             </button>
                         </div>
 
@@ -194,15 +195,23 @@ const LoginPanel = ({ isOpen, onClose }: LoginPanelProps) => {
                                 <div className="input-wrapper">
                                     <Lock size={18} className="input-icon" />
                                     <input
-                                        type="password"
+                                        type={showPassword ? 'text' : 'password'}
                                         id="password"
-                                        className="form-input"
+                                        className="form-input form-input-password"
                                         placeholder="••••••••"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
                                         disabled={isLoading}
                                     />
+                                    <button
+                                        type="button"
+                                        className="password-toggle-btn"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                                    >
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
                                 </div>
                             </div>
 

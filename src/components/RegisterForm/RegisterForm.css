@@ -178,6 +178,42 @@
     box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
 }
 
+/* Password Input Wrapper */
+.register-input-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.register-input-password {
+    padding-right: 44px;
+}
+
+.register-password-toggle {
+    position: absolute;
+    right: 6px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: #999999;
+    transition: all 0.2s ease;
+}
+
+.register-password-toggle:hover {
+    background-color: #f0f0f0;
+    color: rgb(45, 47, 48);
+}
+
+.register-password-toggle:active {
+    background-color: #e0e0e0;
+}
+
 .register-select {
     cursor: pointer;
     appearance: none;
